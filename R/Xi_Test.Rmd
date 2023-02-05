@@ -1,0 +1,252 @@
+---
+title: "Xi_test"
+output: html_document
+date: "2022-11-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("C:/政大/LIBANG/Thesis topics/Causal inference/R")
+rm(list=ls())
+
+library("stringr") 
+source("Xi_GOAL.R")
+source("Ball_GOAL.R")
+
+```
+
+```{r}
+#create a X but not mvn
+
+n=500
+p=1200
+X=matrix(NA,n,p)
+#for( i in 1:p ){ X[,i] = runif(n,-1,1) }
+for( i in 1:p ){ X[,i] = sample(runif(n,-1,1),n,replace=TRUE ) }
+
+X = scale(X)
+
+a = c(0,10,50,100)
+var_e = c(0.01,0.5,0.75)
+
+Data_fun <- Data_GenX( X, 
+                alpha = c(0.2,0.2,0,0,0.3,0.3), beta = c(2,2,2,2,0,0), 
+                #alpah = treatment_scale, beta = outcome_scale
+                theta = 2, a = 0, var_e = 0.75, e_distr = 10,
+                num_pi = 1, delta = 0.8,
+                linearY = TRUE, typeY = "cont")
+
+Ori_Data=Data_fun$Data
+Pi=Data_fun$Pi
+cov_e=Data_fun$cov_e
+Data=Data_fun$Error_Data
+pi_01 = pi_10 = Pi[,1]
+
+paste("The number of error term:",sum( Ori_Data$D != Data$D) )
+
+M_A_fix = Xi_GOAL(Data, cov_e, Consider_D = TRUE, Pi[,1],Pi[,2])
+M_A_noFix = Xi_GOAL(Data, cov_e, Consider_D = TRUE, 0,0)
+
+M_X_fix = Xi_GOAL(Data, cov_e, Consider_D = TRUE, Pi[,1],Pi[,2])
+M_X_noFix = Xi_GOAL(Data, matrix(0,p,p),Consider_D = TRUE, Pi[,1],Pi[,2])
+
+Ball_errorData = Ball_GOAL(Data)
+Ball_actualData = Ball_GOAL(Ori_Data)
+
+paste("The fix A result:",M_A_fix$ATE)
+paste("The no fix A result:",M_A_noFix$ATE)
+paste("The fix X result:",M_X_fix$ATE)
+paste("The no fix X result:",M_X_noFix$ATE)
+paste("The Ball result with error Data:",Ball_errorData$ATE )
+paste("The Ball result:with true Data",Ball_actualData$ATE )
+paste("Actual ATE:",mean(Ori_Data$Y[Ori_Data$D ==1]  ) - mean(Ori_Data$Y[Ori_Data$D == 0]  ) )
+
+```
+
+```
+M_X_fix$wAMD
+M_X_fix$Coefficients_propensity_score
+M_X_fix$kersye
+M_X_fix$Fix_A_table
+```
+
+```{r}
+#MVN
+n=500
+p=1200
+a = c(0,10,50,100)
+var_e = c(0.01,0.5,0.75)
+
+Data_fun <- Data_Gen(n = n, p = p, mean_x = 0, sig_x = 1, rho = 0,
+                alpha = c(1,0,0.5), beta = c(2,2,0),
+                theta = 0, a = 10, var_e = 0.75, e_distr=10,
+                num_pi = 1, delta = 0.5,
+                linearY = FALSE, typeY = "pois")
+
+Ori_Data=Data_fun$Data
+Pi=Data_fun$Pi
+cov_e=Data_fun$cov_e
+Data=Data_fun$Error_Data
+pi_01 = pi_10 = Pi[,1]
+
+paste("The number of error term:",sum( Ori_Data$D != Data$D) )
+
+
+M_A_fix = Xi_GOAL(Data, cov_e, Consider_D = TRUE, Pi[,1],Pi[,2])
+M_A_noFix = Xi_GOAL(Data, cov_e, Consider_D = TRUE, 0,0)
+
+M_X_fix = Xi_GOAL(Data, cov_e, Consider_D = TRUE, Pi[,1],Pi[,2])
+M_X_noFix = Xi_GOAL(Data, matrix(0,p,p),Consider_D = TRUE, Pi[,1],Pi[,2])
+
+paste("The fix A result:",M_A_fix$ATE)
+paste("The no fix A result:",M_A_noFix$ATE)
+paste("The fix X result:",M_X_fix$ATE)
+paste("The no fix X result:",M_X_noFix$ATE)
+paste("Actual ATE:",mean(Ori_Data$Y[Ori_Data$D ==1]  ) - mean(Ori_Data$Y[Ori_Data$D == 0]  ) )
+
+M_X_fix$wAMD
+M_X_fix$Coefficients_propensity_score
+M_X_fix$kersye
+M_X_fix$Fix_A_table
+
+M_X_noFix$kersye
+```
+
+```{r}
+#simulation study function
+model_simulation = function(N,n,p,alpha,beta,e_distr,linearY,typeY){
+  Fix_ATE_list = c()
+  noFix_ATE_list = c()
+  CorXi_num_XcXp_list = c()
+  
+  Ball_TrueData_ATE_list = c()
+  Ball_errorData_ATE_list = c()
+  Ball_num_XcXp_list = c()
+  
+  real_ATE_list = c()
+  num_error_D_list = c()
+  
+  for( i in 1:N){
+    tryCatch({
+      Data_fun <- Data_Gen(n = n, p = p, mean_x = 0, sig_x = 0.75, rho = 0,
+                      alpha = alpha, beta = beta,
+                      theta = 0, a = 0, var_e = 0.75, e_distr=e_distr,
+                      num_pi = 1, delta = 0.5,
+                      linearY = linearY, typeY = typeY)
+      
+      Ori_Data = Data_fun$Data
+      pi_01 = pi_10 = Data_fun$Pi[,1]
+      cov_e = Data_fun$cov_e
+      Data = Data_fun$Error_Data
+      
+      num_error_D = sum( Ori_Data$D != Data$D)
+      
+      # Xi Model
+      noFix = Xi_GOAL(Data, matrix(0,p,p), Consider_D = TRUE, 0, 0)
+      Fix = Xi_GOAL(Data, cov_e, Consider_D = TRUE, pi_01, pi_10)
+      
+      #detect Xc and Xp
+      CorXi_num_XcXp = sum( str_detect(names(Fix$kersye), "Xc") | str_detect(names(Fix$kersye), "Xp" ))
+      
+      # Ball Model
+      Ball_errorData = Ball_GOAL(Data)
+      Ball_actualData = Ball_GOAL(Ori_Data)
+      Ball_num_XcXp = sum( str_detect(names(Ball_errorData$Ball), "Xc") | str_detect(names(Ball_errorData$Ball), "Xp" ))
+    
+      # True ATE
+      real_ATE = mean(Ori_Data$Y[Ori_Data$D == 1])-mean(Ori_Data$Y[Ori_Data$D == 0])
+      
+      Fix_ATE_list = c(Fix_ATE_list, Fix$ATE)
+      noFix_ATE_list = c(noFix_ATE_list, noFix$ATE)
+      CorXi_num_XcXp_list = c(CorXi_num_XcXp_list, CorXi_num_XcXp)
+      
+      Ball_TrueData_ATE_list = c(Ball_TrueData_ATE_list, Ball_actualData$ATE)
+      Ball_errorData_ATE_list = c(Ball_errorData_ATE_list, Ball_errorData$ATE)
+      Ball_num_XcXp_list = c(Ball_num_XcXp_list, Ball_num_XcXp)
+      
+      real_ATE_list = c(real_ATE_list, real_ATE)
+      num_error_D_list = c(num_error_D_list, num_error_D)
+      #print(paste("number of iteration:",i ))
+    },
+    error = function(err){},
+    finally = {}
+    )
+    
+  }
+  
+  mean_Fix_ATE = mean(Fix_ATE_list)
+  var_Fix_ATE = var(Fix_ATE_list)
+  mean_noFix_ATE = mean(noFix_ATE_list)
+  var_noFix_ATE = var(noFix_ATE_list)
+  mean_CorXi_num_XcXp = mean(CorXi_num_XcXp_list)
+  
+  mean_Ball_TrueData_ATE = mean(Ball_TrueData_ATE_list)
+  var_Ball_TrueData_ATE = var(Ball_TrueData_ATE_list)
+  mean_Ball_errorData_ATE = mean(Ball_errorData_ATE_list)
+  var_Ball_errorData_ATE = var(Ball_errorData_ATE_list)
+  mean_Ball_num_XcXp = mean(Ball_num_XcXp_list)
+  
+  mean_real_ATE = mean(real_ATE_list)
+  var_real_ATE = var(real_ATE_list)
+  mean_num_error_D = mean(num_error_D_list)
+  
+  bias_Fix =  abs( mean_Fix_ATE-mean_real_ATE )
+  bias_noFix = abs( mean_noFix_ATE-mean_real_ATE )
+  bias_Ball_TrueData = abs( mean_Ball_TrueData_ATE-mean_real_ATE )
+  bias_Ball_errorData = abs( mean_Ball_errorData_ATE-mean_real_ATE )
+  
+  result = c(mean_Fix_ATE,var_Fix_ATE,bias_Fix,mean_noFix_ATE,var_noFix_ATE,bias_noFix,
+    mean_CorXi_num_XcXp,
+    mean_Ball_TrueData_ATE,var_Ball_TrueData_ATE,bias_Ball_TrueData,
+    mean_Ball_errorData_ATE,var_Ball_errorData_ATE,bias_Ball_errorData,
+    mean_Ball_num_XcXp,
+    mean_real_ATE,var_real_ATE,mean_num_error_D)
+  result = round(result,6)
+  names(result) = c("mean_Fix_ATE","var_Fix_ATE","bias_Fix","mean_noFix_ATE","var_noFix_ATE","bias_noFix",
+    "mean_CorXi_num_XcXp",
+    "mean_Ball_TrueData_ATE","var_Ball_TrueData_ATE","bias_Ball_TrueData",
+    "mean_Ball_errorData_ATE","var_Ball_errorData_ATE","bias_Ball_errorData",
+    "mean_Ball_num_XcXp",
+    "mean_real_ATE","var_real_ATE","mean_num_error_D")
+  return(result)
+}
+```
+
+```{r}
+N = 500
+n_list = c(300,500)
+p_list = c(600,1200)
+alpha = c(1,0,0.5)
+beta = c(2,2,0)
+linearY_list = FALSE
+typeY_list = c("cont","binary","pois")
+result = matrix(NA,6,19)
+colnames(result) = c("info","mean_Fix_ATE","var_Fix_ATE","bias_Fix","mean_noFix_ATE","var_noFix_ATE","bias_noFix",
+    "mean_CorXi_num_XcXp",
+    "mean_Ball_TrueData_ATE","var_Ball_TrueData_ATE","bias_Ball_TrueData",
+    "mean_Ball_errorData_ATE","var_Ball_errorData_ATE","bias_Ball_errorData",
+    "mean_Ball_num_XcXp",
+    "mean_real_ATE","var_real_ATE","mean_num_error_D","run_time")
+
+e_distr = "normal"
+k=2
+i=1
+for(typeY in typeY_list){
+  for(j in 1:length(n_list)){
+    print(paste("step:",k,i ))
+    n = n_list[j]
+    p = p_list[j]
+    result[i,2:18] = model_simulation(N,n,p,alpha,beta,e_distr,linearY,typeY)
+    result[i,1] = paste0(n," /",p," /", typeY, " /", linearY, " /", e_distr)
+    i = i+1
+  }
+}
+write.table(result,paste0("simulation",k,".csv"),sep=",",row.names = FALSE )
+  
+
+
+```
+
